@@ -17,38 +17,54 @@
 
 require 'winapi'
 
-local function is_lol_active()
+local function is_window_active(window_class_name)
     local w = winapi.get_foreground_window()
-    return w:get_class_name() == "RiotWindowClass"
+    return w:get_class_name() == window_class_name
 end
 
 local M = {}
 
-function M.key_down(sc)
-    if not is_lol_active() then return end
-    winapi.send_keyboard_input(0, sc, M._KE_SCANCODE)
+function M.key_down(vk)
+    flags = 0
+    winapi.send_keyboard_input(vk, 0, flags)
 end
 
-function M.key_up(sc)
-    if not is_lol_active() then return end
-    winapi.send_keyboard_input(0, sc, M._KE_SCANCODE_KEYUP)
+function M.key_up(vk)
+    flags = M._KE_KEYUP
+    winapi.send_keyboard_input(vk, 0, flags)
 end
 
-function M.key_press(sc, holdtime)    
-    if not is_lol_active() then return end
-    M.key_down(sc)
-    if holdtime ~= nil then
+function M.skey_down(sc)
+    flags = M._KE_SCANCODE
+    winapi.send_keyboard_input(0, sc, flags)
+end
+
+function M.skey_up(vk)
+    flags = M._KE_SCANCODE_KEYUP
+    winapi.send_keyboard_input(0, sc, flags)
+end
+
+function M.skey_press(sc, holdtime)
+    M.skey_down(sc)
+    if holdtime then
         winapi.sleep(holdtime)
     end
-    M.key_up(sc)
+    M.skey_up(sc)
+end
+
+function M.key_press(vk, holdtime)
+    M.key_down(vk)
+    if holdtime then
+        winapi.sleep(holdtime)
+    end
+    M.key_up(vk)
 end
 
 function M.mouse_move(x, y, absolute)
-    if not is_lol_active() then return end
     if absolute == nil then absolute = true end
     local flags = M._ME_MOVE
     if absolute then
-        flags = flags + M._ME_ABSOLUTE
+        flags = bit.bor(flags, M._ME_ABSOLUTE)
         x, y = M.s2m(x, y)
     end
     winapi.send_mouse_input(x, y, flags)
@@ -57,41 +73,46 @@ end
 -- note: actual x, y movement depends on mouse acceleration settings
 -- read the microsoft docs to see why
 function M.mouse_move_relative(x, y)
-    if not is_lol_active() then return end
     return M.mouse_move(x, y, false)
 end
 
 function M.mouse_down(lr)
-    if not is_lol_active() then return end
     local down, up = M._get_button_constants(lr)
     local flags = down
     winapi.send_mouse_input(0, 0, flags)
 end
 
 function M.mouse_up(lr)
-    if not is_lol_active() then return end
     local down, up = M._get_button_constants(lr)
-    local flags = up 
+    local flags = up
     winapi.send_mouse_input(0, 0, flags)
 end
 
 function M.mouse_press(lr, holdtime)
-    if not is_lol_active() then return end
-    M.mouse_down(x, y, lr)
+    M.mouse_down(lr)
     if holdtime ~= nil then
         winapi.sleep(holdtime)
     end
-    M.mouse_up()
+    M.mouse_up(lr)
 end
 
 -- convert screen coordinates to magical absolute mouse coordinates [0-65535]
 -- todo: does getscreenx return screen resolution or window size? we need resolution
 function M.s2m(x, y)
-    local sx = GetScreenX()
-    local sy = GetScreenY()
-    local rx = (x / sx) * 65536
-    local ry = (y / sy) * 65536
-    return rx, ry
+    local use_old = false
+    if use_old then
+        local sx = GetScreenX()
+        local sy = GetScreenY()
+        local rx = (x / sx) * 65536
+        local ry = (y / sy) * 65536
+        return rx, ry
+    else
+        local sx = GetScreenX()
+        local sy = GetScreenY()
+        local rx = (x / sx)
+        local ry = (y / sy)
+        return rx, ry
+    end
 end
 
 -- private ---------------------------------------------------------------------
@@ -100,7 +121,7 @@ end
 -- http://msdn.microsoft.com/en-us/library/windows/desktop/ms646271(v=vs.85).aspx
 M._KE_KEYUP = 0x0002
 M._KE_SCANCODE = 0x0008
-M._KE_SCANCODE_KEYUP = M._KE_KEYUP + M._KE_SCANCODE -- no bitwise or in lua 5.1
+M._KE_SCANCODE_KEYUP = bit.bor(M._KE_KEYUP, M._KE_SCANCODE)
 -- mouse event
 -- http://msdn.microsoft.com/en-us/library/windows/desktop/ms646273(v=vs.85).aspx
 M._ME_MOVE = 0x0001
@@ -123,10 +144,9 @@ end
 -- test ------------------------------------------------------------------------
 
 local _run_test = false
-local _console_mode = SetTimerCallback==nil
-if _run_test and _console_mode then    
-    function GetScreenX() return 1280 end
-    function GetScreenY() return 1024 end
+if _run_test then
+    function GetScreenX() return 1920 end
+    function GetScreenY() return 1080 end
     require 'SKeys'
     print('testing...')
     local p = winapi.spawn_process('notepad')
@@ -149,7 +169,7 @@ if _run_test and _console_mode then
     M.mouse_move(0, 0)
     -- todo: actual mouse_move_relative movement changes based on mouse accel settings
     for i=0,10 do
-        winapi.sleep(10)        
+        winapi.sleep(10)
         M.mouse_move_relative(10,10)
         M.mouse_press('right', 200)
     end
