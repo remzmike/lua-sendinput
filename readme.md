@@ -12,9 +12,7 @@ I added 2 functions:
 * send_mouse_input
 * send_keyboard_input
 
-See: winapi-module-patch.c
-
-## usage
+The required modifications are in **winapi-module-patch.c**
 
 All times are in milliseconds.
 
